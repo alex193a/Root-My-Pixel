@@ -8,9 +8,30 @@ import android.os.IBinder
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 object KernelSuDetector {
+
+    /** Installs in flight app-wide; probing is suppressed while any is running. */
+    private val installsInFlight = AtomicInteger(0)
+
+    fun beginInstall() {
+        installsInFlight.incrementAndGet()
+    }
+
+    fun endInstall() {
+        installsInFlight.updateAndGet { if (it > 0) it - 1 else 0 }
+    }
+
+    fun isInstallInFlight(): Boolean = installsInFlight.get() > 0
+
+    /**
+     * Whether KernelSU is live *right now*, per ksud's kernel-side version.
+     * Deliberately ignores on-disk paths: `/data/adb/ksu` survives reboots.
+     */
     fun isActive(context: Context): Boolean {
+        if (isInstallInFlight()) return false
+
         val available = runCatching {
             Shizuku.pingBinder() &&
                 Shizuku.isPreV11().not() &&
@@ -20,12 +41,13 @@ object KernelSuDetector {
         if (!available) return false
 
         val args = Shizuku.UserServiceArgs(
-            ComponentName(context.packageName, ExploitService::class.java.name)
+            ComponentName(context.packageName, ProbeService::class.java.name)
         )
             .daemon(false)
-            .processNameSuffix("exploit_service")
+            .processNameSuffix("probe_service")
             .version(1)
         val connected = CountDownLatch(1)
+        // Read only after await() succeeds — that is the happens-before edge.
         var service: IExploitService? = null
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -38,20 +60,34 @@ object KernelSuDetector {
             }
         }
 
+        var bound = false
         return try {
             Shizuku.bindUserService(args, connection)
-            connected.await(SERVICE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            bound = true
+            if (!connected.await(SERVICE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) return false
             val output = service?.exec(
-                "/data/local/tmp/ksud-pixel debug version 2>/dev/null || true"
+                "$KSUD_PATH debug version 2>/dev/null || true"
             ).orEmpty()
-            ROOT_VERSION.find(output)?.groupValues?.get(1)?.toIntOrNull()?.let { it > 0 } == true
+            val version = parseKernelVersion(output)
+            version != null && version > 0
         } catch (_: Exception) {
             false
         } finally {
-            runCatching { Shizuku.unbindUserService(args, connection, true) }
+            if (bound) {
+                runCatching { Shizuku.unbindUserService(args, connection, true) }
+            }
         }
     }
 
+    /**
+     * Kernel-side version from `ksud debug version`, or null if ksud did not
+     * answer. Callers rely on null ("no answer") differing from 0 ("not live").
+     */
+    fun parseKernelVersion(output: String): Int? =
+        KERNEL_VERSION.find(output)?.groupValues?.get(1)?.toIntOrNull()
+
+    const val KSUD_PATH = "/data/local/tmp/ksud-pixel"
+
     private const val SERVICE_TIMEOUT_SECONDS = 5L
-    private val ROOT_VERSION = Regex("Kernel Version: ([0-9]+)")
+    private val KERNEL_VERSION = Regex("Kernel Version:\\s*(-?[0-9]+)")
 }
