@@ -24,6 +24,7 @@ import com.alex193a.rootmypixel.utils.NativeProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -129,7 +130,12 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 phase = InstallPhase.Checking,
                 probeOutput = mutableState.value.probeOutput,
             )
+            KernelSuDetector.beginInstall()
             try {
+                // Probing is blocking, so cancel() does not stop it — join, or it
+                // tears its Shizuku service down while the exploit is running.
+                discoveryJob?.cancelAndJoin()
+
                 setPhase(InstallPhase.Checking, app.getString(R.string.status_checking))
                 val deviceInfo = NativeProbe.readDeviceSnapshot()
 
@@ -195,6 +201,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 if (error is CancellationException) throw error
                 appendLog("[-] ${error.message ?: error.javaClass.simpleName}")
                 setPhase(InstallPhase.Failed, app.getString(R.string.status_install_failed))
+            } finally {
+                KernelSuDetector.endInstall()
             }
         }
     }
@@ -336,7 +344,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
     private fun installKernelSu(payloads: VerifiedPayloads) {
         val ksudSource = payloads.kernelSu.absolutePath
-        val ksudDest = "/data/local/tmp/ksud-pixel"
+        val ksudDest = KernelSuDetector.KSUD_PATH
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
 
         // 1. Wait for daemon to be ready
@@ -374,14 +382,32 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             appendLog(lateResult.output.take(2000))
         }
 
-        // 4. Verify KSU is actually loaded (check multiple paths)
-        var ksuActive = lateResult.code == 0 &&
-            lateResult.output.contains("KernelSU control verified")
+        // 4. Verify KSU is actually loaded. ksud's kernel-side version is the
+        // only check valid on every KMI: on android14-6.1 the node/dir probe
+        // reports success even when the module failed to load. Fall back to the
+        // probe only when ksud cannot answer — dropping /data/adb/ksu from it is
+        // what made a good load look like a failure on android15-6.6.
+        var ksuActive = false
         for (i in 1..10) {
-            if (ksuActive) break
+            // stderr dropped: a missing ksud must read as "no answer", not as a
+            // transient failure to runHelper's retry loop.
+            val version = runHelper(helper, "-c", "$ksudDest debug version 2>/dev/null")
+            val kernelVersion = KernelSuDetector.parseKernelVersion(version.output)
+            if (kernelVersion != null) {
+                if (kernelVersion > 0) {
+                    appendLog("[+] KernelSU verified (attempt $i): kernel version $kernelVersion")
+                    ksuActive = true
+                    break
+                }
+                // Definitive "not live" — do not let the fallback overrule it.
+                Thread.sleep(500)
+                continue
+            }
+
             val check = runHelper(helper, "-c",
                 "test -e /dev/kernelsu && echo KSU_OK || " +
                 "test -e /sys/kernel/kernelsu && echo KSU_OK || " +
+                "test -e /data/adb/ksu && echo KSU_OK || " +
                 "echo KSU_NOT_FOUND")
             if (check.output.contains("KSU_OK")) {
                 appendLog("[+] KernelSU verified (attempt $i): ${check.output.take(60)}")
