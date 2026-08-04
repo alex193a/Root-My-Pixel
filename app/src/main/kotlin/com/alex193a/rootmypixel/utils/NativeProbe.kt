@@ -21,9 +21,7 @@ object NativeProbe {
      */
     fun isKernelSuActive(): Boolean {
         return File("/dev/kernelsu").exists() ||
-            File("/sys/kernel/kernelsu").exists() ||
-            File("/data/adb/ksu").exists() ||
-            File("/data/adb/ksu/bin/ksu").exists()
+            File("/sys/kernel/kernelsu").exists()
     }
 
     /**
