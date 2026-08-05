@@ -39,6 +39,14 @@
       "buildDisplay": "CP2A.260605.012",
       "exploitAsset": "exploits/stallion-CP2A.260605.012.so",
       "kmi": "android15-6.6"
+    },
+    {
+      "profileId": "raven-TP1A.220601.001",
+      "codename": "raven",
+      "kernelRelease": "5.10.43-android13l-12",
+      "buildDisplay": "TP1A.220601.001",
+      "exploitAsset": "exploits/raven-TP1A.220601.001.so",
+      "kmi": "android13-5.10"
     }
   ]
 }

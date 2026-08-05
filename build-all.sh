@@ -49,6 +49,7 @@ TARGETS=(
   "mustang-CP2A.260705.006"   # Pixel 10 Pro XL
   "rango-CP2A.260605.012"     # Pixel 10 Pro Fold
   "stallion-CP2A.260605.012"  # Pixel 10a
+  "raven-TP1A.220601.001"     # Pixel 6 Pro
 )
 
 echo ""
