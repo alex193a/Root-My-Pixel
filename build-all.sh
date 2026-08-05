@@ -42,8 +42,9 @@ else
 fi
 CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_PLATFORM/bin/aarch64-linux-android35-clang"
 
-# ── Pixel 10 family targets ─────────────────────────────────
+# ── Supported targets ───────────────────────────────────────
 TARGETS=(
+  "cheetah-CP1A.260405.005"   # Pixel 7 Pro
   "frankel-CP2A.260605.012"   # Pixel 10
   "blazer-CP2A.260605.012"    # Pixel 10 Pro
   "mustang-CP2A.260705.006"   # Pixel 10 Pro XL

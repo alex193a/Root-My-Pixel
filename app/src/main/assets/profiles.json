@@ -1,6 +1,14 @@
 {
   "profiles": [
     {
+      "profileId": "cheetah-CP1A.260405.005",
+      "codename": "cheetah",
+      "kernelRelease": "6.1.145-android14-11",
+      "buildDisplay": "CP1A.260405.005",
+      "exploitAsset": "exploits/cheetah-CP1A.260405.005.so",
+      "kmi": "android14-6.1"
+    },
+    {
       "profileId": "mustang-CP2A.260705.006",
       "codename": "mustang",
       "kernelRelease": "6.6.118-android15-8",
