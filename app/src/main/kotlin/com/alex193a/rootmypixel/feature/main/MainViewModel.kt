@@ -18,6 +18,7 @@ import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
 import com.alex193a.rootmypixel.domain.usecase.ResolveTargetUseCase
 import com.alex193a.rootmypixel.feature.install.InstallActivity
+import com.alex193a.rootmypixel.shizuku.KernelSuDetector
 import com.alex193a.rootmypixel.utils.NativeProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -112,7 +113,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mutableReSukiSuInstalled.value = app.packageManager
                     .getLaunchIntentForPackage("com.resukisu.resukisu") != null
                 val probe = NativeProbe.run()
-                if (NativeProbe.isKernelSuActive()) {
+                if (NativeProbe.isKernelSuActive() || KernelSuDetector.isActive(app)) {
                     mutableState.value = InstallUiState(
                         phase = InstallPhase.Installed,
                         message = app.getString(R.string.status_ksu_active),
