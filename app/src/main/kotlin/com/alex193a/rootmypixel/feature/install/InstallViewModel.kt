@@ -373,29 +373,75 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             appendLog(lateResult.output.take(2000))
         }
 
-        // 4. Verify KSU is actually loaded (check multiple paths)
-        var ksuActive = false
+        // 4. Verify the module is live by asking the kernel, not by probing
+        //    paths. /dev/kernelsu, /sys/kernel/kernelsu and /data/adb/ksu are
+        //    none of them created by ReSukiSU in LKM mode, so this reported
+        //    failure on a device where the module had loaded and root worked.
+        //    `ksud debug info` answers through the module's own prctl
+        //    interface; /proc/modules is the backstop.
+        var ksuInfo: String? = null
         for (i in 1..10) {
             val check = runHelper(helper, "-c",
-                "test -e /dev/kernelsu && echo KSU_OK || " +
-                "test -e /sys/kernel/kernelsu && echo KSU_OK || " +
-                "test -e /data/adb/ksu && echo KSU_OK || " +
-                "echo KSU_NOT_FOUND")
-            if (check.output.contains("KSU_OK")) {
-                appendLog("[+] KernelSU verified (attempt $i): ${check.output.take(60)}")
-                ksuActive = true
+                "if $ksudDest debug info 2>/dev/null | grep -qE '^version: [1-9]'; then " +
+                "$ksudDest debug info 2>/dev/null; " +
+                "elif grep -q '^kernelsu ' /proc/modules; then " +
+                "grep '^kernelsu ' /proc/modules; " +
+                "else echo KSU_NOT_FOUND; fi")
+            if (!check.output.contains("KSU_NOT_FOUND") && check.output.isNotBlank()) {
+                appendLog("[+] KernelSU verified (attempt $i):\n${check.output.take(400)}")
+                ksuInfo = check.output
                 break
             }
             Thread.sleep(500)
         }
-        require(ksuActive) {
+        require(ksuInfo != null) {
             app.getString(
                 R.string.error_ksu_verify,
                 lateResult.code,
                 lateResult.output.take(200)
             )
         }
+
+        // 5. Point the module at the manager that is actually installed.
+        //    ReSukiSU authenticates its manager by APK signature, and the ko
+        //    bundled here cannot know the signature of a manager the user
+        //    installed separately — the normal case, since the manager ships
+        //    on its own cadence. Without this the module is live but the
+        //    manager shows "not installed" and can grant nothing.
+        registerManager(helper, ksudDest)
+
         appendLog(app.getString(R.string.log_ksu_control_verified))
+    }
+
+    /**
+     * Registers the installed ReSukiSU manager's APK signature with the loaded
+     * module, so it can recognise the manager and grant root through it.
+     *
+     * Not fatal on failure: the module is loaded and root works either way, and
+     * a manager can also be pointed at it by hand.
+     */
+    private fun registerManager(helper: File, ksudDest: String) {
+        val apkPath = runCatching {
+            app.packageManager
+                .getPackageInfo(RESUKISU_PACKAGE, 0)
+                .applicationInfo
+                ?.sourceDir
+        }.getOrNull()
+
+        if (apkPath.isNullOrBlank()) {
+            appendLog("[!] ReSukiSU manager not installed — skipping signature registration")
+            return
+        }
+
+        appendLog("[*] Registering the ReSukiSU manager with the module...")
+        val set = runHelper(helper, "-c",
+            "$ksudDest kernel dynamic-manager set-apk '$apkPath'")
+        if (set.code != 0) {
+            appendLog("[!] Manager registration failed (${set.code}): ${set.output.take(200)}")
+            return
+        }
+        val got = runHelper(helper, "-c", "$ksudDest kernel dynamic-manager get")
+        appendLog("[+] Manager registered: ${got.output.trim().take(200)}")
     }
 
     private fun runHelper(helper: File, vararg arguments: String): CommandResult {
@@ -491,5 +537,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val EXPLOIT_TOTAL_MILLIS = 1_800_000L
         private const val MAX_LOG_CHARS = 5 * 1024 * 1024
         private val LOG_POLL_INTERVAL = 250.milliseconds
+
+        private const val RESUKISU_PACKAGE = "com.resukisu.resukisu"
     }
 }
