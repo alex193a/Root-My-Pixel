@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
-import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,15 +47,11 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private val downloadPayloadsUseCase: DownloadPayloadsUseCase by lazy {
         get(DownloadPayloadsUseCase::class.java)
     }
-    private val payloadRepository: com.alex193a.rootmypixel.domain.repository.PayloadRepository by lazy {
-        get(com.alex193a.rootmypixel.domain.repository.PayloadRepository::class.java)
-    }
 
     private val mutableState = MutableStateFlow(InstallUiState())
     private val mutableTargetCatalog = MutableStateFlow(TargetCatalogUiState())
     private var discoveryJob: Job? = null
     private var installJob: Job? = null
-    private var customProfileId: String? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val targetCatalog: StateFlow<TargetCatalogUiState> = mutableTargetCatalog.asStateFlow()
@@ -123,27 +118,6 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun extractCustomProfile(uri: Uri) {
-        discoveryJob?.cancel()
-        discoveryJob = viewModelScope.launch(Dispatchers.IO) {
-            appendLog("[*] Reading selected boot image…")
-            when (val result = payloadRepository.extractFromBootImage(uri) { message -> appendLog("[*] $message") }) {
-                is Result.Success -> {
-                    customProfileId = result.data.profileId
-                    mutableState.value = mutableState.value.copy(
-                        phase = InstallPhase.Ready,
-                        message = "Custom target profile ready",
-                    )
-                    appendLog("[+] ${result.data.profileId}")
-                }
-                is Result.Error -> {
-                    appendLog("[-] ${result.error.message}")
-                    setPhase(InstallPhase.Failed, "Custom profile extraction failed")
-                }
-            }
-        }
-    }
-
     fun install(profileId: String? = null, permissiveOnly: Boolean = false) {
         if (installJob?.isActive == true ||
             mutableState.value.phase == InstallPhase.Installed) return
@@ -178,8 +152,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                         }
                     }
                     else -> {
-                        when (val r = customProfileId?.let { resolveTargetUseCase(it) }
-                            ?: resolveTargetUseCase(snapshot)) {
+                        when (val r = resolveTargetUseCase(snapshot)) {
                             is Result.Success -> r.data
                             is Result.Error ->
                                 throw IllegalStateException(r.error.message)

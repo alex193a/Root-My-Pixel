@@ -3,6 +3,7 @@ package com.alex193a.rootmypixel.feature.main
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
@@ -16,6 +17,7 @@ import com.alex193a.rootmypixel.core.Result
 import com.alex193a.rootmypixel.domain.model.DeviceSnapshot
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
+import com.alex193a.rootmypixel.domain.repository.PayloadRepository
 import com.alex193a.rootmypixel.domain.usecase.ResolveTargetUseCase
 import com.alex193a.rootmypixel.feature.install.InstallActivity
 import com.alex193a.rootmypixel.utils.NativeProbe
@@ -35,12 +37,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val resolveTargetUseCase: ResolveTargetUseCase by lazy {
         get(ResolveTargetUseCase::class.java)
     }
+    private val payloadRepository: PayloadRepository by lazy {
+        get(PayloadRepository::class.java)
+    }
 
     private val mutableState = MutableStateFlow(InstallUiState())
     private val mutableShizukuAvailable = MutableStateFlow(false)
     private val mutableReSukiSuInstalled = MutableStateFlow(false)
     private val mutableUptimeExceeded = MutableStateFlow(false)
+    private val prefs = app.getSharedPreferences("custom_profile", Context.MODE_PRIVATE)
     private var refreshJob: Job? = null
+    private var customProfileId: String? = prefs.getString(KEY_CUSTOM_PROFILE_ID, null)
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val shizukuAvailable: StateFlow<Boolean> = mutableShizukuAvailable.asStateFlow()
@@ -151,12 +158,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     is Result.Error -> {
-                        mutableState.value = InstallUiState(
-                            phase = InstallPhase.Failed,
-                            message = app.getString(R.string.status_support_failed),
-                            probeOutput = probe,
-                            log = "$probe\n[-] ${result.error.message}",
-                        )
+                        val customId = customProfileId
+                        if (customId != null) {
+                            // A user-extracted profile is already available for
+                            // this device; keep it installable across recreations.
+                            mutableState.value = InstallUiState(
+                                phase = InstallPhase.Ready,
+                                message = app.getString(R.string.status_custom_profile_ready),
+                                probeOutput = probe,
+                                log = "$probe\n[+] Custom profile ready: $customId",
+                            )
+                        } else {
+                            mutableState.value = InstallUiState(
+                                phase = InstallPhase.Failed,
+                                message = app.getString(R.string.status_support_failed),
+                                probeOutput = probe,
+                                log = "$probe\n[-] ${result.error.message}",
+                            )
+                        }
                     }
                 }
             } catch (error: Throwable) {
@@ -170,11 +189,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Extracts a custom target profile from a user-provided boot.img or factory
+     * image. Runs on the main screen for unsupported devices (where the Install
+     * button is disabled), then hands the generated profile to InstallActivity.
+     */
+    fun extractCustomProfile(uri: Uri) {
+        if (refreshJob?.isActive == true) return
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch(Dispatchers.IO) {
+            mutableState.value = mutableState.value.copy(
+                phase = InstallPhase.Downloading,
+                message = app.getString(R.string.status_extracting_boot_image),
+            )
+            appendLog("[*] Reading selected boot image…")
+            when (val result = payloadRepository.extractFromBootImage(uri) { step ->
+                appendLog("[*] $step")
+            }) {
+                is Result.Success -> {
+                    customProfileId = result.data.profileId
+                    prefs.edit().putString(KEY_CUSTOM_PROFILE_ID, result.data.profileId).apply()
+                    mutableState.value = mutableState.value.copy(
+                        phase = InstallPhase.Ready,
+                        message = app.getString(R.string.status_custom_profile_ready),
+                    )
+                    appendLog("[+] Custom profile generated: ${result.data.profileId}")
+                    appendLog("[+] Tap Install to continue with this profile")
+                }
+                is Result.Error -> {
+                    appendLog("[-] ${result.error.message}")
+                    mutableState.value = mutableState.value.copy(
+                        phase = InstallPhase.Failed,
+                        message = app.getString(R.string.status_support_failed),
+                    )
+                }
+            }
+        }
+    }
+
     fun install() {
         val intent = Intent(app, InstallActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            customProfileId?.let { putExtra(InstallActivity.EXTRA_PROFILE_ID, it) }
         }
         app.startActivity(intent)
+    }
+
+    private fun appendLog(line: String) {
+        val clean = line.trim()
+        if (clean.isBlank()) return
+        mutableState.value = mutableState.value.copy(
+            log = (mutableState.value.log + "\n" + clean).trim().takeLast(MAX_LOG_CHARS),
+        )
     }
 
     fun softReboot() {
@@ -217,5 +283,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val SHIZUKU_PERMISSION_CODE = 101
         private const val UPTIME_THRESHOLD_MS = 5 * 60 * 1000L // 5 minutes
+        private const val MAX_LOG_CHARS = 5 * 1024 * 1024
+        private const val KEY_CUSTOM_PROFILE_ID = "custom_profile_id"
     }
 }

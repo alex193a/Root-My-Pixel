@@ -2,6 +2,7 @@ package com.alex193a.rootmypixel.feature.main
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
@@ -74,6 +76,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         installViewModel.initShizuku()
 
+        val bootPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+            installViewModel.extractCustomProfile(uri)
+        }
+
         setContent {
             val state by installViewModel.state.collectAsStateWithLifecycle()
             val shizukuAvailable by installViewModel.shizukuAvailable.collectAsStateWithLifecycle()
@@ -88,6 +99,15 @@ class MainActivity : ComponentActivity() {
                     uptimeExceeded = uptimeExceeded,
                     onRefresh = { installViewModel.refresh() },
                     onInstall = { installViewModel.install() },
+                    onSelectBootImage = {
+                        bootPicker.launch(
+                            arrayOf(
+                                "application/octet-stream",
+                                "application/zip",
+                                "*/*",
+                            )
+                        )
+                    },
                     onExportLog = { installViewModel.exportLog() },
                 )
             }
@@ -109,6 +129,7 @@ private fun MainScreen(
     uptimeExceeded: Boolean,
     onRefresh: () -> Unit,
     onInstall: () -> Unit,
+    onSelectBootImage: () -> Unit,
     onExportLog: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -232,6 +253,21 @@ private fun MainScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            // Boot image / factory image picker for unsupported devices.
+            if (state.phase == InstallPhase.Failed) {
+                OutlinedButton(
+                    onClick = onSelectBootImage,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                ) {
+                    Icon(Icons.Rounded.FolderOpen, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.action_select_boot_image))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Install button
             Button(

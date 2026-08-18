@@ -7,6 +7,9 @@
     <string name="status_checking">Checking device compatibility…</string>
     <string name="status_not_installed">Device supported — ready to install</string>
     <string name="status_support_failed">Device not supported</string>
+    <string name="status_extracting_boot_image">Extracting offsets from boot image…</string>
+    <string name="status_custom_profile_ready">Custom profile ready — install to continue</string>
+    <string name="action_select_boot_image">Select boot.img or Factory Image</string>
     <string name="status_ksu_active">ReSukiSU is active</string>
     <string name="shikuzu_shell_active">Shizuku connected and active</string>
     <string name="shikuzu_shell_not_active">Shizuku not connected — exploit will fail</string>
