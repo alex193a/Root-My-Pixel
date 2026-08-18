@@ -10,18 +10,57 @@ import java.util.zip.ZipInputStream
 
 /** Reads Pixel boot images without loading a factory archive into memory. */
 class BootImageReader(private val resolver: ContentResolver) {
+
     fun readKernel(uri: Uri, onProgress: (String) -> Unit = {}): ByteArray {
         onProgress("Reading boot image…")
-        resolver.openInputStream(uri)?.use { input ->
-            val name = uri.lastPathSegment.orEmpty().lowercase()
-            val boot = if (name.endsWith(".zip")) extractBootFromZip(input, onProgress)
-            else input.readBytesBounded(MAX_BOOT_BYTES)
+        val stream = resolver.openInputStream(uri)
+            ?: throw IOException("Unable to open selected image")
+        stream.use { input ->
+            val buffered = input.buffered()
+            val head = ByteArray(4)
+            var read = 0
+            while (read < head.size) {
+                val n = buffered.read(head, read, head.size - read)
+                if (n < 0) break
+                read += n
+            }
+            val boot = if (read == 4 && head.zipMagic) {
+                extractBootFromZip(prefix(buffered, head), onProgress)
+            } else {
+                prefix(buffered, head, read).readBytesBounded(MAX_BOOT_BYTES)
+            }
             return KernelDecompressor.decompress(parseBootImage(boot), onProgress)
-        } ?: throw IOException("Unable to open selected image")
+        }
     }
 
+    private fun prefix(buffered: InputStream, head: ByteArray, headLen: Int = head.size): InputStream =
+        object : InputStream() {
+            private var pos = 0
+            override fun read(): Int {
+                if (pos < headLen) return head[pos++].toInt() and 0xff
+                return buffered.read()
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (len == 0) return 0
+                var done = 0
+                if (pos < headLen) {
+                    val n = minOf(len, headLen - pos)
+                    head.copyInto(b, off, pos, pos + n)
+                    pos += n
+                    done = n
+                }
+                if (done < len) {
+                    val more = buffered.read(b, off + done, len - done)
+                    if (more < 0) return if (done > 0) done else -1
+                    done += more
+                }
+                return done
+            }
+        }
+
     private fun extractBootFromZip(input: InputStream, onProgress: (String) -> Unit): ByteArray {
-        ZipInputStream(input.buffered()).use { zip ->
+        ZipInputStream(input).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val entryName = entry.name.substringAfterLast('/').lowercase()
@@ -37,19 +76,26 @@ class BootImageReader(private val resolver: ContentResolver) {
     companion object {
         private const val MAX_BOOT_BYTES = 128L * 1024 * 1024
         private const val BOOT_MAGIC = "ANDROID!"
-        private const val PAGE_SIZE = 4096
+
+        private val ByteArray.zipMagic: Boolean
+            get() = size >= 4 && this[0] == 'P'.code.toByte() && this[1] == 'K'.code.toByte() &&
+                (this[2].toInt() and 0xff) == 0x03 && (this[3].toInt() and 0xff) == 0x04
 
         internal fun parseBootImage(image: ByteArray): ByteArray {
-            require(image.size >= PAGE_SIZE) { "Boot image is truncated" }
+            require(image.size >= 4096) { "Boot image is truncated" }
             require(image.copyOfRange(0, 8).decodeToString() == BOOT_MAGIC) {
                 "Invalid Android boot image magic"
             }
             val kernelSize = image.le32(8).toLong()
             require(kernelSize in 1..MAX_BOOT_BYTES) { "Invalid kernel size: $kernelSize" }
             val headerVersion = image.le32(40)
-            val kernelOffset = if (headerVersion >= 3) PAGE_SIZE else {
+            val kernelOffset = if (headerVersion >= 3) {
+                4096
+            } else {
                 val pageSize = image.le32(36)
-                require(pageSize in 512..65536 && Integer.bitCount(pageSize) == 1)
+                require(pageSize in 512..65536 && Integer.bitCount(pageSize) == 1) {
+                    "Invalid boot image page size: $pageSize"
+                }
                 pageSize
             }
             require(kernelOffset + kernelSize <= image.size) { "Kernel exceeds boot image" }
@@ -67,7 +113,8 @@ internal object KernelDecompressor {
     fun decompress(kernel: ByteArray, onProgress: (String) -> Unit = {}): ByteArray {
         onProgress("Decompressing Kernel Image…")
         val result = when {
-            kernel.startsWith(GZIP) -> GZIPInputStream(kernel.inputStream()).readBytesBounded(MAX_KERNEL_BYTES)
+            kernel.size >= 2 && kernel[0] == GZIP[0] && kernel[1] == GZIP[1] ->
+                GZIPInputStream(kernel.inputStream()).readBytesBounded(MAX_KERNEL_BYTES)
             kernel.size >= 4 && kernel.le32(0) == LZ4_FRAME_MAGIC -> Lz4Frame.decode(kernel)
             else -> kernel
         }
@@ -85,42 +132,79 @@ private object Lz4Frame {
         var p = 4
         require(p < input.size) { "Truncated LZ4 frame" }
         val flg = input[p++].toInt() and 0xff
-        val bd = input[p++].toInt() and 0xff
+        p++ // block descriptor byte (ignored for decoding)
         require((flg ushr 6) == 1) { "Unsupported LZ4 frame version" }
         val hasContentSize = flg and 0x08 != 0
+        val hasDictId = flg and 0x01 != 0
+        if (hasDictId) p += 4
         if (hasContentSize) p += 8
-        if (flg and 0x01 != 0) p++ // dictionary id
-        p++ // header checksum
+        p++ // header checksum (not verified)
+
         val out = ByteArrayOutputStream()
         while (p + 4 <= input.size) {
-            val rawSize = input.le32(p); p += 4
-            if (rawSize == 0) break
+            val rawSize = input.le32(p)
+            p += 4
+            if (rawSize == 0) break // end mark
             val uncompressed = rawSize and Int.MAX_VALUE
-            require(uncompressed <= input.size - p) { "Truncated LZ4 block" }
-            val block = input.copyOfRange(p, p + uncompressed); p += uncompressed
-            if (rawSize < 0) out.write(block) else out.write(decodeBlock(block))
+            require(p + uncompressed <= input.size) { "Truncated LZ4 block" }
+            val block = input.copyOfRange(p, p + uncompressed)
+            p += uncompressed
+            if (rawSize < 0) {
+                out.write(block)
+            } else {
+                out.write(decodeBlock(block))
+            }
+            if (flg and 0x10 != 0) p += 4 // block checksum (not verified)
         }
         return out.toByteArray()
     }
 
     private fun decodeBlock(src: ByteArray): ByteArray {
-        val out = ByteArrayOutputStream(src.size * 2)
+        // All decoded bytes; growable, indexed. Matches copy from this window,
+        // including bytes produced by the same match (overlapping copies).
+        var buf = ByteArray(maxOf(1024, src.size * 2))
+        var size = 0
+        fun ensure(capacity: Int) {
+            if (capacity > buf.size) buf = buf.copyOf(maxOf(capacity, buf.size * 2))
+        }
         var p = 0
         while (p < src.size) {
             val token = src[p++].toInt() and 0xff
             var literal = token ushr 4
-            if (literal == 15) { var n: Int; do { n = src[p++].toInt() and 0xff; literal += n } while (n == 255) }
-            require(p + literal <= src.size); out.write(src, p, literal); p += literal
+            if (literal == 15) {
+                var n: Int
+                do {
+                    n = src[p++].toInt() and 0xff
+                    literal += n
+                } while (n == 255)
+            }
+            require(p + literal <= src.size) { "Truncated LZ4 literal" }
+            ensure(size + literal)
+            src.copyInto(buf, size, p, p + literal)
+            size += literal
+            p += literal
             if (p == src.size) break
-            require(p + 2 <= src.size)
-            val offset = (src[p].toInt() and 0xff) or ((src[p + 1].toInt() and 0xff) shl 8); p += 2
-            require(offset > 0 && offset <= out.size())
+            require(p + 2 <= src.size) { "Truncated LZ4 match" }
+            val offset = (src[p].toInt() and 0xff) or ((src[p + 1].toInt() and 0xff) shl 8)
+            p += 2
+            require(offset in 1..size) { "Invalid LZ4 match offset" }
             var match = token and 0x0f
-            if (match == 15) { var n: Int; do { n = src[p++].toInt() and 0xff; match += n } while (n == 255) }
+            if (match == 15) {
+                var n: Int
+                do {
+                    n = src[p++].toInt() and 0xff
+                    match += n
+                } while (n == 255)
+            }
             match += 4
-            repeat(match) { val bytes = out.toByteArray(); out.write(bytes[bytes.size - offset].toInt()) }
+            ensure(size + match)
+            var copyFrom = size - offset
+            repeat(match) {
+                buf[size++] = buf[copyFrom++]
+                if (copyFrom == size - 1) copyFrom = size - 1 - offset
+            }
         }
-        return out.toByteArray()
+        return buf.copyOf(size)
     }
 }
 
@@ -138,5 +222,6 @@ private fun InputStream.readBytesBounded(max: Long): ByteArray {
     return out.toByteArray()
 }
 
-private fun ByteArray.startsWith(prefix: ByteArray): Boolean = size >= prefix.size && prefix.indices.all { this[it] == prefix[it] }
-private fun ByteArray.le32(offset: Int): Int = (this[offset].toInt() and 255) or ((this[offset + 1].toInt() and 255) shl 8) or ((this[offset + 2].toInt() and 255) shl 16) or ((this[offset + 3].toInt() and 255) shl 24)
+private fun ByteArray.le32(offset: Int): Int =
+    (this[offset].toInt() and 255) or ((this[offset + 1].toInt() and 255) shl 8) or
+        ((this[offset + 2].toInt() and 255) shl 16) or ((this[offset + 3].toInt() and 255) shl 24)
