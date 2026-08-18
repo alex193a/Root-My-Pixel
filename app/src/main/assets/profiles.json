@@ -89,6 +89,14 @@
       "kmi": "android14-6.1"
     },
     {
+      "profileId": "caiman-CP2A.260705.006",
+      "codename": "caiman",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/caiman-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
       "profileId": "bluejay-CP1A.260405.005.so",
       "codename": "bluejay",
       "kernelRelease": "6.1.145-android14-11",
