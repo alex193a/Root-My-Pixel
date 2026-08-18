@@ -9,4 +9,5 @@ data class VerifiedPayloads(
     val exploit: File,
     val kernelSu: File,
     val kmi: String,
+    val targetConfig: File? = null,
 )

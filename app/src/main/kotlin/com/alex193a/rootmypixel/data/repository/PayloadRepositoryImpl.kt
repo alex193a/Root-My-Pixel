@@ -1,5 +1,8 @@
 package com.alex193a.rootmypixel.data.repository
 
+import android.net.Uri
+import com.alex193a.rootmypixel.core.boot.BootImageReader
+import com.alex193a.rootmypixel.core.kallsyms.SymbolResolver
 import com.alex193a.rootmypixel.core.Result
 import com.alex193a.rootmypixel.data.datasource.PayloadLocalDataSource
 import com.alex193a.rootmypixel.data.model.toDomain
@@ -21,6 +24,8 @@ class PayloadRepositoryImpl(
 ) : PayloadRepository {
 
     private var cachedProfiles: List<TargetProfile>? = null
+    private val customProfiles = mutableMapOf<String, TargetProfile>()
+    private val customConfigs = mutableMapOf<String, File>()
 
     override suspend fun resolveTarget(
         snapshot: DeviceSnapshot,
@@ -28,7 +33,7 @@ class PayloadRepositoryImpl(
         return when (val result = loadCachedProfiles()) {
             is Result.Error -> result
             is Result.Success -> {
-                val profiles = result.data
+                val profiles = result.data + customProfiles.values
 
                 val targetCodename = snapshot.device.trim()
                 val targetKernelRel = snapshot.kernelRelease.trim()
@@ -85,7 +90,7 @@ class PayloadRepositoryImpl(
             return Result.Error(PayloadError.ExtractionError("Unable to create payload directory"))
         }
 
-        // Extract exploit .so from assets
+        // Extract exploit .so from assets, or use a previously generated generic payload.
         val exploitFile = File(payloadDir, "exploit.so")
         exploitFile.delete()
         val exploitResult = localDataSource.extractAsset(
@@ -129,11 +134,35 @@ class PayloadRepositoryImpl(
         }
 
         onProgress("Payloads ready")
-        return Result.Success(VerifiedPayloads(exploit = exploitFile, kernelSu = ksudFile, kmi = profile.kmi))
+        return Result.Success(VerifiedPayloads(exploit = exploitFile, kernelSu = ksudFile, kmi = profile.kmi, targetConfig = customConfigs[profile.profileId]))
     }
 
     override suspend fun loadTargets(): Result<List<TargetProfile>, PayloadError> {
         return loadCachedProfiles()
+    }
+
+    override suspend fun extractFromBootImage(
+        uri: Uri,
+        onProgress: (String) -> Unit,
+    ): Result<TargetProfile, PayloadError> = try {
+        val reader = BootImageReader(localDataSource.contentResolver)
+        val kernel = reader.readKernel(uri, onProgress)
+        onProgress("Analyzing kallsyms…")
+        val release = Regex("Linux version\\s+([^\\s]+)").find(String(kernel, Charsets.ISO_8859_1))?.groupValues?.get(1)
+            ?: throw IllegalArgumentException("Kernel release banner not found")
+        val symbols = com.alex193a.rootmypixel.core.kallsyms.KallsymsScanner().resolve(kernel, SymbolResolver.requiredSymbols)
+        val config = SymbolResolver.toConfig(release, symbols)
+        val id = "custom-${release.replace(Regex("[^A-Za-z0-9._-]"), "_") }"
+        val profile = TargetProfile(id, "custom", release, id, "exploits/cve-2026-43499-generic-${config.kernelFamily / 10}.${config.kernelFamily % 10}.so", "android${if (config.kernelFamily == 61) 14 else 15}-${config.kernelFamily / 10}.${config.kernelFamily % 10}")
+        val customDir = File(filesDir, "custom_profiles").apply { mkdirs() }
+        val configFile = File(customDir, "$id.bin").apply { writeBytes(config.toBinary()) }
+        File(customDir, "$id.json").writeText("{\"profileId\":\"$id\",\"kernelRelease\":\"$release\",\"config\":\"${android.util.Base64.encodeToString(config.toBinary(), android.util.Base64.NO_WRAP)}\"}")
+        customProfiles[id] = profile
+        customConfigs[id] = configFile
+        onProgress("Target profile generated")
+        Result.Success(profile)
+    } catch (error: Throwable) {
+        Result.Error(PayloadError.ExtractionError(error.message ?: "Failed to extract target profile"))
     }
 
     private fun loadCachedProfiles(): Result<List<TargetProfile>, PayloadError> {

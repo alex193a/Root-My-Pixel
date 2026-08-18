@@ -12,6 +12,7 @@ import java.io.FileOutputStream
  * assets shipped inside the APK.
  */
 open class PayloadLocalDataSource(private val context: Context) {
+    val contentResolver get() = context.contentResolver
     private val json = Json { ignoreUnknownKeys = true }
 
     /**

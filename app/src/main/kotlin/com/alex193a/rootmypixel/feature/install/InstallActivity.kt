@@ -8,6 +8,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
@@ -70,6 +73,11 @@ class InstallActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
+        val bootPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            lifecycleScope.launch { installViewModel.extractCustomProfile(uri) }
+        }
         val permissiveOnly = intent.getBooleanExtra(EXTRA_PERMISSIVE_ONLY, false)
         if (savedInstanceState == null) {
             installViewModel.install(profileId, permissiveOnly)
@@ -85,6 +93,7 @@ class InstallActivity : ComponentActivity() {
                         installState = installState,
                         permissiveOnly = permissiveOnly,
                         onRetry = { installViewModel.install(profileId, permissiveOnly) },
+                        onSelectBoot = { bootPicker.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) },
                         onSoftReboot = { installViewModel.softReboot() },
                         onClose = { finish() },
                         modifier = Modifier.padding(padding),
@@ -128,6 +137,7 @@ private fun InstallScreen(
     installState: com.alex193a.rootmypixel.domain.model.InstallUiState,
     permissiveOnly: Boolean,
     onRetry: () -> Unit,
+    onSelectBoot: () -> Unit,
     onSoftReboot: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -167,6 +177,11 @@ private fun InstallScreen(
 
         // Status card
         InstallerStatusCard(installState)
+        if (installState.phase == InstallPhase.Failed) {
+            FilledTonalButton(onClick = onSelectBoot, modifier = Modifier.fillMaxWidth()) {
+                Text("Select boot.img or Factory Image")
+            }
+        }
 
         // Steps
         InstallerSteps(installState.phase, steps)

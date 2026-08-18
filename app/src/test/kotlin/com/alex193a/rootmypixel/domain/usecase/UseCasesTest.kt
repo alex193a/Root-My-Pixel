@@ -1,6 +1,7 @@
 package com.alex193a.rootmypixel.domain.usecase
 
 import com.alex193a.rootmypixel.core.Result
+import android.net.Uri
 import com.alex193a.rootmypixel.domain.model.DeviceSnapshot
 import com.alex193a.rootmypixel.domain.model.TargetProfile
 import com.alex193a.rootmypixel.domain.model.VerifiedPayloads
@@ -52,6 +53,10 @@ class UseCasesTest {
                     kmi = "android15-6.6",
                 )
             )
+        }
+
+        override suspend fun extractFromBootImage(uri: Uri, onProgress: (String) -> Unit): Result<TargetProfile, PayloadError> {
+            return Result.Error(PayloadError.UnsupportedError("Not used in test"))
         }
 
         override suspend fun loadTargets(): Result<List<TargetProfile>, PayloadError> {

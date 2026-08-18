@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,6 +47,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
     private val downloadPayloadsUseCase: DownloadPayloadsUseCase by lazy {
         get(DownloadPayloadsUseCase::class.java)
+    }
+    private val payloadRepository: com.alex193a.rootmypixel.domain.repository.PayloadRepository by lazy {
+        get(com.alex193a.rootmypixel.domain.repository.PayloadRepository::class.java)
     }
 
     private val mutableState = MutableStateFlow(InstallUiState())
@@ -114,6 +118,26 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                     message = app.getString(R.string.status_support_failed),
                     log = "[-] ${error.message ?: error.javaClass.simpleName}",
                 )
+            }
+        }
+    }
+
+    fun extractCustomProfile(uri: Uri) {
+        discoveryJob?.cancel()
+        discoveryJob = viewModelScope.launch(Dispatchers.IO) {
+            appendLog("[*] Reading selected boot image…")
+            when (val result = payloadRepository.extractFromBootImage(uri) { message -> appendLog("[*] $message") }) {
+                is Result.Success -> {
+                    mutableState.value = mutableState.value.copy(
+                        phase = InstallPhase.Ready,
+                        message = "Custom target profile ready",
+                    )
+                    appendLog("[+] ${result.data.profileId}")
+                }
+                is Result.Error -> {
+                    appendLog("[-] ${result.error.message}")
+                    setPhase(InstallPhase.Failed, "Custom profile extraction failed")
+                }
             }
         }
     }
@@ -274,6 +298,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             handle.service.startExploit(
                 payloads.exploit.readBytes(),
                 helper.readBytes(),
+                payloads.targetConfig?.readBytes() ?: ByteArray(0),
                 "/data/local/tmp/exploit.log",
             )
 

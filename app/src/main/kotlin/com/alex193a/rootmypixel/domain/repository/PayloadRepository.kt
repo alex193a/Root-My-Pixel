@@ -4,6 +4,7 @@ import com.alex193a.rootmypixel.core.Error
 import com.alex193a.rootmypixel.core.Result
 import com.alex193a.rootmypixel.domain.model.DeviceSnapshot
 import com.alex193a.rootmypixel.domain.model.TargetProfile
+import android.net.Uri
 import com.alex193a.rootmypixel.domain.model.VerifiedPayloads
 
 /**
@@ -34,6 +35,12 @@ interface PayloadRepository {
      * Load all available target profiles bundled in the app.
      */
     suspend fun loadTargets(): Result<List<TargetProfile>, PayloadError>
+
+    /** Extracts a kernel from boot.img/factory ZIP and creates a cached custom profile. */
+    suspend fun extractFromBootImage(
+        uri: Uri,
+        onProgress: (String) -> Unit = {},
+    ): Result<TargetProfile, PayloadError>
 }
 
 sealed interface PayloadError : Error {
