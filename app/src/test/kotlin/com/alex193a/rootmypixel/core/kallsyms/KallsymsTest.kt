@@ -24,15 +24,17 @@ class KallsymsTest {
             "selinux_enforcing" to 0x200L,
             "kmalloc_caches" to 0x300L,
         )
-        // Token table: 256 single-char strings (32..126 cycled).
+        // Token table: token 0 is the empty string (single NUL); tokens 1..255
+        // are one printable char each. This matches real kallsyms: token_index[0]
+        // points at an empty string.
         val tokenTable = ByteArrayOutputStream()
-        for (t in 0 until 256) {
-            val c = (32 + (t % 95)).toByte()
-            tokenTable.write(c.toInt())
+        tokenTable.write(0) // token 0: empty
+        for (t in 1 until 256) {
+            tokenTable.write(32 + (t % 95))
             tokenTable.write(0)
         }
         val tokenTableBytes = tokenTable.toByteArray()
-        val tokenIndex = IntArray(256) { it * 2 } // each entry is 2 bytes apart
+        val tokenIndex = IntArray(256) { if (it == 0) 0 else it * 2 - 1 }
 
         fun encodeName(name: String): ByteArray {
             val out = ByteArrayOutputStream()
@@ -153,6 +155,26 @@ class KallsymsTest {
     }
 
     @Test
+    fun realBootImage_kallsymsFailsFastNotHanging() {
+        val path = "/Users/alex193a/Library/Application Support/PixelFlasher/" +
+            "boot_images4/d81bbb49154d4f7203afcce33dee5867e8e6ba46/boot.img"
+        val file = File(path)
+        assumeTrue("reference boot.img not present on this machine", file.exists())
+        val image = file.readBytes()
+        val kernel = KernelDecompressor.decompress(BootImageReader.parseBootImage(image))
+        val started = System.currentTimeMillis()
+        // This specific kernel is 6.6 LTO/PGO/BOLT with a non-standard kallsyms
+        // layout, so resolution should fail FAST with a clear error, not hang.
+        try {
+            KallsymsScanner().resolve(kernel, setOf("init_task"))
+        } catch (e: IllegalArgumentException) {
+            val elapsed = System.currentTimeMillis() - started
+            println("kallsyms fail-fast after ${elapsed}ms: ${e.message}")
+            assertTrue("took too long: ${elapsed}ms", elapsed < 30_000)
+        }
+    }
+
+    @Test
     fun gzipKernel_decompresses() {
         val raw = ByteArray(0x40)
         val magic = byteArrayOf(0x41, 0x52, 0x4d, 0x64) // "ARM\x64" LE == 0x644d5241
@@ -167,17 +189,17 @@ class KallsymsTest {
     @Test
     fun decoder_roundTripsNames() {
         val tokenTable = ByteArrayOutputStream()
-        for (t in 0 until 256) {
-            tokenTable.write((32 + (t % 95)))
+        tokenTable.write(0)
+        for (t in 1 until 256) {
+            tokenTable.write(32 + (t % 95))
             tokenTable.write(0)
         }
-        val tokenIndex = IntArray(256) { it * 2 }
+        val tokenIndex = IntArray(256) { if (it == 0) 0 else it * 2 - 1 }
         val names = ByteArrayOutputStream()
         names.write(9)
         for (c in "init_task") names.write(c.code - 32)
-        val (name, next) = KallsymsDecoder.decodeName(
-            names.toByteArray(), 0, tokenTable.toByteArray(), tokenIndex,
-        )
+        val decoder = KallsymsDecoder(tokenTable.toByteArray(), tokenIndex)
+        val (name, next) = decoder.decodeName(names.toByteArray(), 0)
         assertEquals("init_task", name)
         assertEquals(10, next)
     }

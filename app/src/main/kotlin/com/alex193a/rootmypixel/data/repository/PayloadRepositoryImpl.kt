@@ -161,8 +161,13 @@ class PayloadRepositoryImpl(
             .find(String(kernel, Charsets.ISO_8859_1))
             ?.groupValues?.get(1)
             ?: throw IllegalArgumentException("Kernel release banner not found")
+        val started = System.currentTimeMillis()
         val symbols = com.alex193a.rootmypixel.core.kallsyms.KallsymsScanner()
             .resolve(kernel, SymbolResolver.requiredSymbols)
+        val elapsed = System.currentTimeMillis() - started
+        require(elapsed <= KALLSYMS_BUDGET_MS) {
+            "kallsyms analysis exceeded time budget ($elapsed ms)"
+        }
         val config = SymbolResolver.toConfig(release, symbols)
 
         val kmi = when (config.kernelFamily) {
@@ -220,6 +225,10 @@ class PayloadRepositoryImpl(
                 // ignore malformed custom profile
             }
         }
+    }
+
+    companion object {
+        private const val KALLSYMS_BUDGET_MS = 30_000L
     }
 
     private fun loadCachedProfiles(): Result<List<TargetProfile>, PayloadError> {
