@@ -5,8 +5,10 @@ import com.alex193a.rootmypixel.core.boot.KernelDecompressor
 import com.alex193a.rootmypixel.domain.model.TargetConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.GZIPOutputStream
@@ -118,6 +120,36 @@ class KallsymsTest {
         val kernel = BootImageReader.parseBootImage(image)
         assertEquals(100, kernel.size)
         assertEquals(0x5a.toByte(), kernel[0])
+    }
+
+    @Test
+    fun legacyLz4_uncompressedBlock_decompresses() {
+        val raw = ByteArray(0x40)
+        byteArrayOf(0x41, 0x52, 0x4d, 0x64).copyInto(raw, 0x38) // "ARM\x64"
+        val out = ByteArrayOutputStream()
+        out.write(intLE(0x184C2102.toInt()))
+        out.write(intLE(0x80000000.toInt() or raw.size)) // uncompressed block
+        out.write(raw)
+        out.write(intLE(0)) // end mark
+        val decompressed = KernelDecompressor.decompress(out.toByteArray())
+        assertEquals(raw[0x38], decompressed[0x38])
+        assertTrue(decompressed.size >= 0x40)
+    }
+
+    @Test
+    fun realBootImage_extractsArm64Kernel() {
+        val path = "/Users/alex193a/Library/Application Support/PixelFlasher/" +
+            "boot_images4/d81bbb49154d4f7203afcce33dee5867e8e6ba46/boot.img"
+        val file = File(path)
+        assumeTrue("reference boot.img not present on this machine", file.exists())
+        val image = file.readBytes()
+        val kernel = BootImageReader.parseBootImage(image)
+        val decompressed = KernelDecompressor.decompress(kernel)
+        // ARM64 Image header magic at offset 0x38.
+        assertEquals(0x41, decompressed[0x38].toInt())
+        assertEquals(0x52, decompressed[0x39].toInt())
+        assertEquals(0x4d, decompressed[0x3a].toInt())
+        assertEquals(0x64, decompressed[0x3b].toInt())
     }
 
     @Test

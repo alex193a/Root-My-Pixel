@@ -67,6 +67,7 @@ import com.alex193a.rootmypixel.R
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
 import com.alex193a.rootmypixel.ui.theme.RootMyPixelTheme
+import com.alex193a.rootmypixel.ui.theme.indeterminateBorder
 
 class MainActivity : ComponentActivity() {
     private val installViewModel by viewModels<MainViewModel>()
@@ -199,13 +200,15 @@ private fun MainScreen(
             UptimeErrorCard(exceeded = uptimeExceeded)
 
             if (uptimeExceeded) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Shizuku status
             ShizukuStatusCard(available = shizukuAvailable)
 
-            Spacer(modifier = Modifier.height(8.dp))
+            if (!reSukiSuInstalled) {
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // ReSukiSU Manager status
             ReSukiSuManagerCard(
@@ -255,16 +258,27 @@ private fun MainScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Boot image / factory image picker for unsupported devices.
-            if (state.phase == InstallPhase.Failed) {
+            if (state.phase == InstallPhase.Failed || state.phase == InstallPhase.Downloading) {
+                val extracting = state.phase == InstallPhase.Downloading
                 OutlinedButton(
                     onClick = onSelectBootImage,
+                    enabled = !extracting,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
+                        .height(56.dp)
+                        .indeterminateBorder(
+                            active = extracting,
+                            color = MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     Icon(Icons.Rounded.FolderOpen, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.action_select_boot_image))
+                    Text(
+                        stringResource(
+                            if (extracting) R.string.status_extracting_boot_image
+                            else R.string.action_select_boot_image
+                        )
+                    )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
