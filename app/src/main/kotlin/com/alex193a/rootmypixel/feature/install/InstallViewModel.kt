@@ -56,6 +56,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private val mutableTargetCatalog = MutableStateFlow(TargetCatalogUiState())
     private var discoveryJob: Job? = null
     private var installJob: Job? = null
+    private var customProfileId: String? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val targetCatalog: StateFlow<TargetCatalogUiState> = mutableTargetCatalog.asStateFlow()
@@ -128,6 +129,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             appendLog("[*] Reading selected boot image…")
             when (val result = payloadRepository.extractFromBootImage(uri) { message -> appendLog("[*] $message") }) {
                 is Result.Success -> {
+                    customProfileId = result.data.profileId
                     mutableState.value = mutableState.value.copy(
                         phase = InstallPhase.Ready,
                         message = "Custom target profile ready",
@@ -176,7 +178,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                         }
                     }
                     else -> {
-                        when (val r = resolveTargetUseCase(snapshot)) {
+                        when (val r = customProfileId?.let { resolveTargetUseCase(it) }
+                            ?: resolveTargetUseCase(snapshot)) {
                             is Result.Success -> r.data
                             is Result.Error ->
                                 throw IllegalStateException(r.error.message)
