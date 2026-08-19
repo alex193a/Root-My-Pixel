@@ -64,9 +64,20 @@ class BootImageReader(private val resolver: ContentResolver) {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val entryName = entry.name.substringAfterLast('/').lowercase()
-                if (!entry.isDirectory && entryName == "boot.img") {
-                    onProgress("Extracting boot.img from factory image…")
-                    return zip.readBytesBounded(MAX_BOOT_BYTES)
+                if (entry.isDirectory) continue
+                when {
+                    entryName == "boot.img" -> {
+                        onProgress("Extracting boot.img from factory image…")
+                        return zip.readBytesBounded(MAX_BOOT_BYTES)
+                    }
+                    // A Pixel factory image wraps the per-device content in a
+                    // nested `image-<device>-<build>.zip`; recurse into it.
+                    entryName.startsWith("image-") && entryName.endsWith(".zip") -> {
+                        onProgress("Opening ${entry.name}…")
+                        // A nested image archive always contains boot.img; if
+                        // not, the recursive call throws IoException.
+                        return extractBootFromZip(zip, onProgress)
+                    }
                 }
             }
         }

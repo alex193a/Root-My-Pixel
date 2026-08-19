@@ -155,7 +155,7 @@ class KallsymsTest {
     }
 
     @Test
-    fun realBootImage_kallsymsFailsFastNotHanging() {
+    fun realBootImage_kallsymsResolvesFrankelOffsets() {
         val path = "/Users/alex193a/Library/Application Support/PixelFlasher/" +
             "boot_images4/d81bbb49154d4f7203afcce33dee5867e8e6ba46/boot.img"
         val file = File(path)
@@ -163,15 +163,34 @@ class KallsymsTest {
         val image = file.readBytes()
         val kernel = KernelDecompressor.decompress(BootImageReader.parseBootImage(image))
         val started = System.currentTimeMillis()
-        // This specific kernel is 6.6 LTO/PGO/BOLT with a non-standard kallsyms
-        // layout, so resolution should fail FAST with a clear error, not hang.
-        try {
-            KallsymsScanner().resolve(kernel, setOf("init_task"))
-        } catch (e: IllegalArgumentException) {
-            val elapsed = System.currentTimeMillis() - started
-            println("kallsyms fail-fast after ${elapsed}ms: ${e.message}")
-            assertTrue("took too long: ${elapsed}ms", elapsed < 30_000)
-        }
+        val symbols = KallsymsScanner().resolve(kernel, SymbolResolver.requiredSymbols)
+        val elapsed = System.currentTimeMillis() - started
+        println("kallsyms resolved ${symbols.size} symbols in ${elapsed}ms")
+        // 6.6 frankel reference offsets (must match the payload ground truth).
+        assertEquals(0xc8d908L, symbols["ashmem_ioctl"])
+        assertEquals(0xc8e018L, symbols["ashmem_mmap"])
+        assertEquals(0xc8e238L, symbols["ashmem_open"])
+        assertEquals(0xc8e2c0L, symbols["ashmem_release"])
+        assertEquals(0xc8e34cL, symbols["ashmem_show_fdinfo"])
+        assertEquals(0x491eecL, symbols["configfs_read_iter"])
+        assertEquals(0x492418L, symbols["configfs_bin_write_iter"])
+        assertEquals(0x415be0L, symbols["copy_splice_read"])
+        assertEquals(0x3c8940L, symbols["noop_llseek"])
+        assertEquals(0x212e280L, symbols["init_task"])
+        assertEquals(0x2328980L, symbols["root_task_group"])
+        assertEquals(0x16849b0L, symbols["selinux_blob_sizes"])
+        assertEquals(0x1684278L, symbols["security_hook_heads"])
+        assertEquals(0x1683db8L, symbols["kmalloc_caches"])
+        assertEquals(0x1176748L, symbols["anon_pipe_buf_ops"])
+        assertEquals(0x2122260L, symbols["nfulnl_logger"])
+        assertEquals(0x238b2d8L, symbols["sysctl_bootid"])
+        // selinux_enforcing is at offset 0 of selinux_state on 6.1/6.6.
+        assertEquals(0x236a2e0L, symbols["selinux_state"])
+        // The scan must stay well within the on-device time budget.
+        assertTrue("took too long: ${elapsed}ms", elapsed < 15_000)
+        // The assembled config must pass validation.
+        val config = SymbolResolver.toConfig("6.6.118-android15-8", symbols)
+        assertTrue(config.validate().isSuccess)
     }
 
     @Test

