@@ -25,7 +25,8 @@ Root My Pixel lets you *temporarily* gain root access with ReSukiSU in just one 
 4. **KernelSU / ReSukiSU Integration**
    - Staging of the `ksud` binary matching the device's Kernel Module Interface (KMI, e.g., `android15-6.6`).
    - The app triggers the KernelSU **late-load** mechanism (`ksud late-load --kmi <kmi>`).
-   - Verifies KernelSU active status by probing kernel device nodes (`/dev/kernelsu`, `/sys/kernel/kernelsu`, `/data/adb/ksu`).
+   - Verifies KernelSU active status by asking the module itself (`ksud debug info`, falling back to `/proc/modules`).
+   - Registers the installed ReSukiSU Manager's APK signature with the module (`ksud kernel dynamic-manager set-apk`) so it can grant root.
 
 5. **User Interface & Management Tools**
    - Real-time live log progress monitoring.
