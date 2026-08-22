@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Root My Pixel</string>
+
+    <!-- Main screen -->
+    <string name="app_subtitle">靈感來自 Root My Galaxy</string>
+    <string name="status_checking">正在檢查裝置相容性…</string>
+    <string name="status_not_installed">裝置已支援－準備安裝</string>
+    <string name="status_support_failed">裝置不支援</string>
+    <string name="status_ksu_active">ReSukiSU 已啟用</string>
+    <string name="shikuzu_shell_active">Shizuku 已連線且運作中</string>
+    <string name="shikuzu_shell_not_active">Shizuku 未連線 — 漏洞利用將失敗</string>
+    <string name="developed_by">開發者</string>
+    <string name="missing_manager_title">ReSukiSU Manager 未安裝</string>
+    <string name="missing_manager_description">您需要 ReSukiSU Manager 應用程式來管理 root 權限</string>
+
+    <!-- Actions -->
+    <string name="action_install">安裝 ReSukiSU</string>
+    <string name="action_reinstall">重新安裝 ReSukiSU</string>
+    <string name="action_retry">重試</string>
+    <string name="action_close">關閉</string>
+    <string name="action_done">完成</string>
+    <string name="action_soft_reboot">軟重啟 (Userspace)</string>
+    <string name="action_export_log">匯出 exploit.log</string>
+    <string name="action_copy_log">複製日誌</string>
+    <string name="copied_to_clipboard">日誌已複製到剪貼簿</string>
+
+    <!-- Install screen -->
+    <string name="install_title">安裝 ReSukiSU</string>
+    <string name="install_keep_open">安裝期間請保持應用程式開啟</string>
+    <string name="install_live_progress">即時進度</string>
+    <string name="install_preparing">準備中…</string>
+
+    <!-- Phases -->
+    <string name="phase_checking">正在檢查支援資訊…</string>
+    <string name="phase_ready">準備安裝</string>
+    <string name="phase_downloading">正在下載 payload…</string>
+    <string name="phase_exploiting">正在執行漏洞利用…</string>
+    <string name="phase_loading_ksu">正在載入 ReSukiSU 模組…</string>
+    <string name="phase_installed">安裝完成</string>
+    <string name="phase_failed">安裝失敗</string>
+
+    <!-- Status messages -->
+    <string name="status_downloading">正在從 APK 解出 payloads…</string>
+    <string name="status_exploit">正在執行核心漏洞利用…</string>
+    <string name="status_loading_ksu">正在載入 ReSukiSU 模組…</string>
+    <string name="status_install_failed">安裝失敗</string>
+
+    <!-- Steps -->
+    <string name="step_support_title">檢查支援狀態</string>
+    <string name="step_support_detail">確認裝置相容性</string>
+    <string name="step_download_title">解出 payload</string>
+    <string name="step_download_detail">解出內建的漏洞利用程式與 ReSukiSU 二進位檔案</string>
+    <string name="step_exploit_title">執行漏洞利用</string>
+    <string name="step_exploit_detail">取得臨時 root 存取權限</string>
+    <string name="step_ksu_title">載入 ReSukiSU</string>
+    <string name="step_ksu_detail">安裝 ReSukiSU 核心模組</string>
+
+    <!-- Log messages -->
+    <string name="log_profile">已找到相符的設定檔: %1$s</string>
+    <string name="log_download_verified">Payload 解出成功</string>
+    <string name="log_bootstrap_root">Root 環境初始化完成</string>
+    <string name="log_ksu_staged">ReSukiSU 執行檔已準備完成</string>
+    <string name="log_ksu_control_verified">ReSukiSU 控制介面驗證完成</string>
+    <string name="log_install_complete">安裝完成 — ReSukiSU 已啟用</string>
+
+    <!-- Errors -->
+    <string name="error_helper_unavailable">原生輔助程式無法使用</string>
+    <string name="error_exploit_stalled">漏洞利用程式停滯 — 無進度</string>
+    <string name="error_exploit_timeout">漏洞利用程式逾時</string>
+    <string name="error_payload_exit">漏洞利用程式已結束，結束代碼：%1$d%2$s</string>
+    <string name="error_success_marker">漏洞利用程式未回報成功</string>
+    <string name="error_ksu_stage">無法準備 ksud: %1$s</string>
+    <string name="error_ksu_verify">ReSukiSU 載入器失敗 (%1$d): %2$s</string>
+    <string name="error_shizuku_required">需要 Shizuku。請從 Google Play 安裝 Shizuku，並授予 Root My Pixel 所需權限。</string>
+    <string name="error_boot_id">無法讀取 boot ID</string>
+    <string name="error_receipt">無法儲存安裝紀錄</string>
+
+    <!-- Uptime warning -->
+    <string name="uptime_error_title">手機未重開機</string>
+    <string name="uptime_error_message">手機最近尚未重新啟動。建議在安裝前先重新啟動裝置，以確保漏洞利用（Exploit）的穩定性。
+</string>
+</resources>
