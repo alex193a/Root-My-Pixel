@@ -53,6 +53,22 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private var discoveryJob: Job? = null
     private var installJob: Job? = null
 
+    /**
+     * KASLR base leaked by the slide on this boot, if one has been.
+     *
+     * The slide is the stage that can take the kernel down: it arms a PI chain
+     * walk through a page it can only hope it reclaimed, and a miss can
+     * dereference whatever else is there. That makes it the expensive part of
+     * a retry — a lost main route costs time, a lost slide can cost a reboot.
+     *
+     * The base it leaks is fixed for the lifetime of the boot, so once one
+     * attempt has it every later attempt can be handed it and skip the slide
+     * entirely, which takes that gamble out of the retries rather than
+     * repeating it. Held in memory on purpose: a panic reboots the phone and
+     * kills this process, which is exactly when the value stops being valid.
+     */
+    private var kaslrBaseThisBoot: String? = null
+
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val targetCatalog: StateFlow<TargetCatalogUiState> = mutableTargetCatalog.asStateFlow()
 
@@ -270,53 +286,104 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             ?: throw IllegalStateException("Failed to bind Shizuku UserService")
 
         try {
-            val logPrefix = mutableState.value.log
-            handle.service.startExploit(
-                payloads.exploit.readBytes(),
-                helper.readBytes(),
-                "/data/local/tmp/exploit.log",
+            // The exploit races the kernel for a page, and losing that race is a
+            // normal outcome rather than a bug. One press used to mean one race:
+            // lose it and the user got a failure whose only answer was to press
+            // the button again. Do the retrying here instead, so a press means
+            // "get root" rather than "roll once".
+            var lastFailure: String? = null
+            for (attempt in 1..EXPLOIT_ATTEMPTS) {
+                val known = kaslrBaseThisBoot
+                if (known != null) {
+                    appendLog("[*] attempt $attempt/$EXPLOIT_ATTEMPTS, skipping the slide (base $known)")
+                } else {
+                    appendLog("[*] exploit attempt $attempt/$EXPLOIT_ATTEMPTS")
+                }
+                val extraEnv = known?.let { "KASLR_BASE=$it" }
+                val failure = runExploitOnce(handle, payloads, helper, extraEnv)
+                if (failure == null) {
+                    return
+                }
+                lastFailure = failure
+                appendLog("[-] attempt $attempt did not get root: $failure")
+            }
+            throw IllegalStateException(
+                lastFailure ?: app.getString(R.string.error_success_marker)
             )
-
-            val startedAt = SystemClock.elapsedRealtime()
-            var lastProgressAt = startedAt
-            var lastRawLog = ""
-
-            while (handle.service.isRunning) {
-                val remoteLog = handle.service.getLog()
-                val fileLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
-                val currentLog = if (fileLog.length > remoteLog.length) fileLog else remoteLog
-
-                if (currentLog != lastRawLog) {
-                    publishLog(logPrefix, currentLog)
-                    lastRawLog = currentLog
-                    lastProgressAt = SystemClock.elapsedRealtime()
-                }
-                val now = SystemClock.elapsedRealtime()
-                require(now - lastProgressAt < EXPLOIT_STALL_MILLIS) {
-                    app.getString(R.string.error_exploit_stalled)
-                }
-                require(now - startedAt < EXPLOIT_TOTAL_MILLIS) {
-                    app.getString(R.string.error_exploit_timeout)
-                }
-                delay(LOG_POLL_INTERVAL)
-            }
-
-            val exitCode = handle.service.waitFor()
-            val finalLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
-            if (finalLog.isNotBlank()) {
-                publishLog(logPrefix, finalLog)
-            }
-
-            require(exitCode == 0) {
-                app.getString(R.string.error_payload_exit, exitCode, "")
-            }
-            require(finalLog.contains("done=1") && finalLog.contains("root=1")) {
-                app.getString(R.string.error_success_marker)
-            }
         } finally {
             unbindExploitService(handle)
         }
     }
+
+    /**
+     * Runs the payload once. Returns null on success, or a description of why
+     * it did not get root — a lost race is a return value here, not an
+     * exception, because it is worth retrying and a stall or a bad exit is not.
+     */
+    private suspend fun runExploitOnce(
+        handle: ShizukuServiceHandle,
+        payloads: VerifiedPayloads,
+        helper: File,
+        extraEnv: String?,
+    ): String? {
+        val logPrefix = mutableState.value.log
+        handle.service.startExploit(
+            payloads.exploit.readBytes(),
+            helper.readBytes(),
+            "/data/local/tmp/exploit.log",
+            extraEnv,
+        )
+
+        val startedAt = SystemClock.elapsedRealtime()
+        var lastProgressAt = startedAt
+        var lastRawLog = ""
+
+        while (handle.service.isRunning) {
+            val remoteLog = handle.service.getLog()
+            val fileLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
+            val currentLog = if (fileLog.length > remoteLog.length) fileLog else remoteLog
+
+            if (currentLog != lastRawLog) {
+                publishLog(logPrefix, currentLog)
+                lastRawLog = currentLog
+                lastProgressAt = SystemClock.elapsedRealtime()
+            }
+            val now = SystemClock.elapsedRealtime()
+            // A stall or an overall timeout still throws: those mean something
+            // is wrong rather than that a race was lost, and retrying them just
+            // burns the clock.
+            require(now - lastProgressAt < EXPLOIT_STALL_MILLIS) {
+                app.getString(R.string.error_exploit_stalled)
+            }
+            require(now - startedAt < EXPLOIT_TOTAL_MILLIS) {
+                app.getString(R.string.error_exploit_timeout)
+            }
+            delay(LOG_POLL_INTERVAL)
+        }
+
+        val exitCode = handle.service.waitFor()
+        val finalLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
+        if (finalLog.isNotBlank()) {
+            publishLog(logPrefix, finalLog)
+        }
+
+        // Keep any base this run leaked, whether or not it went on to get root.
+        SLIDE_BASE.find(finalLog)?.groupValues?.getOrNull(1)?.let { base ->
+            if (kaslrBaseThisBoot == null) {
+                kaslrBaseThisBoot = "0x$base"
+                appendLog("[*] remembered KASLR base 0x$base for this boot")
+            }
+        }
+
+        if (exitCode != 0) {
+            return app.getString(R.string.error_payload_exit, exitCode, "")
+        }
+        if (!finalLog.contains("done=1") || !finalLog.contains("root=1")) {
+            return app.getString(R.string.error_success_marker)
+        }
+        return null
+    }
+
 
     // Shizuku helpers
 
@@ -491,5 +558,15 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val EXPLOIT_TOTAL_MILLIS = 1_800_000L
         private const val MAX_LOG_CHARS = 5 * 1024 * 1024
         private val LOG_POLL_INTERVAL = 250.milliseconds
+
+        // How many times one press will race before giving up. A lost race
+        // leaves the device running, so a retry costs only time — and once the
+        // first attempt has leaked a base, later ones skip the slide and cannot
+        // panic on it, so they are cheaper still.
+        private const val EXPLOIT_ATTEMPTS = 5
+
+
+
+        private val SLIDE_BASE = Regex("slide-kaslr-ok[^\\n]*?base=([0-9a-f]+)")
     }
 }
