@@ -94,7 +94,7 @@
     <string name="error_payload_exit">Exploit exited with code %1$d%2$s</string>
     <string name="error_success_marker">Exploit did not report success</string>
     <string name="error_ksu_stage">Failed to stage ksud: %1$s</string>
-    <string name="error_ksu_verify">ReSukiSU loader failed (%1$d): %2$s</string>
+    <string name="error_ksu_verify">ReSukiSU verification failed after late-load (exit %1$d): %2$s</string>
     <string name="error_shizuku_required">Shizuku is required. Install Shizuku from Google Play and grant permissions to Root My Pixel.</string>
     <string name="error_boot_id">Cannot read boot ID</string>
     <string name="error_receipt">Cannot persist install receipt</string>

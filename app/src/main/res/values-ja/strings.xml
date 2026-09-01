@@ -104,7 +104,7 @@
     <string name="error_payload_exit">exploit が終了コード %1$d で終了しました%2$s</string>
     <string name="error_success_marker">exploit が成功を報告しませんでした</string>
     <string name="error_ksu_stage">ksud の配置に失敗しました: %1$s</string>
-    <string name="error_ksu_verify">ReSukiSU のローダーが失敗しました (%1$d): %2$s</string>
+    <string name="error_ksu_verify">late-load 後の ReSukiSU 検証に失敗しました (終了コード %1$d): %2$s</string>
     <string name="error_shizuku_required">Shizuku が必要です。Google Play から Shizuku をインストールし、Root My Pixel に権限を許可してください。</string>
     <string name="error_boot_id">boot ID を読み取れません</string>
     <string name="error_receipt">インストール記録を保存できません</string>

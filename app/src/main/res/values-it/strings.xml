@@ -92,7 +92,7 @@
     <string name="error_payload_exit">L\'exploit è uscito con codice %1$d%2$s</string>
     <string name="error_success_marker">L\'exploit non ha segnalato il successo</string>
     <string name="error_ksu_stage">Impossibile preparare ksud: %1$s</string>
-    <string name="error_ksu_verify">Caricamento di ReSukiSU non riuscito (%1$d): %2$s</string>
+    <string name="error_ksu_verify">Verifica di ReSukiSU non riuscita dopo il late-load (codice %1$d): %2$s</string>
     <string name="error_shizuku_required">Shizuku è richiesto. Installa Shizuku da Google Play e concedi le autorizzazioni a Root My Pixel.</string>
     <string name="error_boot_id">Impossibile leggere l\'ID di avvio</string>
     <string name="error_receipt">Impossibile salvare la ricevuta di installazione</string>
