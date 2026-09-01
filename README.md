@@ -89,6 +89,8 @@ To install it on a connected device via ADB:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+⚠️ Keep in mind that the exploit does not have a 100% success rate. Many users have had to try more than 20 times. Many report higher success by opening the app immediately after a reboot, while others find better results 10–40 minutes after rebooting.
+
 ---
 
 ## Credits
