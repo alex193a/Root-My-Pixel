@@ -52,10 +52,11 @@ Root My Pixel lets you *temporarily* gain root access with ReSukiSU in just one 
 | **Pixel 8a**          | `akita`    | `CP2A.260805.005` | `android14-6.1` | ✅      |
 | **Pixel 7a**          | `lynx`     | `CP2A.260705.006` | `android14-6.1` | ✅      |
 | **Pixel 7 Pro**       | `cheetah`  | `CP2A.260705.006` | `android14-6.1` | ✅      |
-| **Pixel 7**           | `panther`  | `CP2A.260705.006`<br>`panther-BP2A.250705.008` | `android14-6.1` | ✅      |
+| **Pixel 7**           | `panther`  | `CP2A.260705.006`<br>`BP2A.250705.008` | `android14-6.1` | ✅      |
 | **Pixel 6a**          | `bluejay`  | `CP2A.260705.006`<br>`CP1A.260405.005` | `android14-6.1` | ✅      |
 | **Pixel 6**           | `oriole`   | `CP2A.260705.006` | `android14-6.1` | ✅      |
 | **Pixel 6 Pro**       | `raven`    | `CP2A.260705.006` | `android14-6.1` | ✅      |
+| **Pixel Tablet**      | `tangorpro`| `BP1A.250405.007` | `android14-6.1` | ✅      |
 
 ---
 

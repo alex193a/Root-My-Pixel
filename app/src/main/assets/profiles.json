@@ -167,6 +167,14 @@
       "buildDisplay": "CP2A.260805.005",
       "exploitAsset": "exploits/stallion-CP2A.260805.005.so",
       "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tangorpro-BP1A.250405.007",
+      "codename": "tangorpro",
+      "kernelRelease": "6.1.99-android14-11",
+      "buildDisplay": "BP1A.250405.007",
+      "exploitAsset": "exploits/tangorpro-BP1A.250405.007.so",
+      "kmi": "android14-6.1"
     }
   ]
 }
