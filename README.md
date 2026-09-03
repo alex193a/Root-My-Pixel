@@ -40,7 +40,7 @@ Root My Pixel lets you *temporarily* gain root access with ReSukiSU in just one 
 |:----------------------|:-----------|:------------------|:----------------|:--------|
 | **Pixel 10**          | `frankel`  | `CP2A.260705.006` | `android15-6.6` | ✅      |
 | **Pixel 10 Pro**      | `blazer`   | `CP2A.260705.006` | `android15-6.6` | ✅      |
-| **Pixel 10 Pro XL**   | `mustang`  | `CP2A.260705.006` | `android15-6.6` | ✅      |
+| **Pixel 10 Pro XL**   | `mustang`  | `CP2A.260705.006`<br>`CP2A.260805.005` | `android15-6.6` | ✅      |
 | **Pixel 10 Pro Fold** | `rango`    | `CP2A.260705.006` | `android15-6.6` | ✅      |
 | **Pixel 10a**         | `stallion` | `CP2A.260705.006`<br>`CP2A.260805.005` | `android14-6.1` | ✅      |
 | **Pixel 9 Pro Fold**  | `comet`    | `CP2A.260705.006` | `android15-6.1` | ✅      |
@@ -57,6 +57,7 @@ Root My Pixel lets you *temporarily* gain root access with ReSukiSU in just one 
 | **Pixel 6a**          | `bluejay`  | `CP2A.260705.006`<br>`CP1A.260405.005` | `android14-6.1` | ✅      |
 | **Pixel 6**           | `oriole`   | `CP2A.260705.006` | `android14-6.1` | ✅      |
 | **Pixel 6 Pro**       | `raven`    | `CP2A.260705.006` | `android14-6.1` | ✅      |
+| **Pixel Fold**        | `felix`.   | `CP2A.260605.012`<br>`CP2A.260705.006` | `android14-6.1` | ✅      |
 | **Pixel Tablet**      | `tangorpro`| `BP1A.250405.007` | `android14-6.1` | ✅      |
 
 ---

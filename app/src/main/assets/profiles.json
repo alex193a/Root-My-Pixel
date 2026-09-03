@@ -175,6 +175,14 @@
       "buildDisplay": "BP1A.250405.007",
       "exploitAsset": "exploits/tangorpro-BP1A.250405.007.so",
       "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "felix-CP2A.260605.012",
+      "codename": "felix",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260605.012",
+      "exploitAsset": "exploits/felix-CP2A.260605.012.so",
+      "kmi": "android14-6.1"
     }
   ]
 }
