@@ -183,6 +183,14 @@
       "buildDisplay": "CP2A.260605.012",
       "exploitAsset": "exploits/felix-CP2A.260605.012.so",
       "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tokay-AD1A.240905.004",
+      "codename": "tokay",
+      "kernelRelease": "6.1.75-android14-11",
+      "buildDisplay": "AD1A.240905.004",
+      "exploitAsset": "exploits/tokay-AD1A.240905.004.so",
+      "kmi": "android14-6.1"
     }
   ]
 }
