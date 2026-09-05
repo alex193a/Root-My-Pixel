@@ -12,6 +12,19 @@ set -euo pipefail
 #   - macOS arm64 or Linux x86_64 host
 # ────────────────────────────────────────────────────────────
 
+# ── Options ─────────────────────────────────────────────────
+# --payloads-only stops after the native helper and the exploit payloads.
+# CI uses it to regenerate the binaries from source before the Gradle build
+# runs, so the TARGETS list below stays the single source of truth for which
+# devices get a payload.
+PAYLOADS_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --payloads-only) PAYLOADS_ONLY=1 ;;
+    *) echo "unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PAYLOADS="$ROOT/Root-My-Pixel-Payloads"
 APP="$ROOT/app"
@@ -89,6 +102,12 @@ for TARGET in "${TARGETS[@]}"; do
     exit 1
   fi
 done
+
+if [ "$PAYLOADS_ONLY" -eq 1 ]; then
+  echo ""
+  echo "═══ PAYLOADS COMPLETE (--payloads-only, skipping APK) ═══"
+  exit 0
+fi
 
 echo ""
 echo "═══ Step 3/3: Build APK ═══"
