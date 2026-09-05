@@ -13,6 +13,9 @@ import com.alex193a.rootmypixel.core.Result
 import com.alex193a.rootmypixel.domain.model.DeviceSnapshot
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
+import com.alex193a.rootmypixel.domain.model.PayloadExecutionError
+import com.alex193a.rootmypixel.domain.model.PayloadReason
+import com.alex193a.rootmypixel.domain.model.PayloadResultParser
 import com.alex193a.rootmypixel.domain.model.TargetProfile
 import com.alex193a.rootmypixel.domain.model.UnrootWarningUi
 import com.alex193a.rootmypixel.domain.model.VerifiedPayloads
@@ -183,7 +186,19 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 appendLog("[*] Using Shizuku shell access: $useShizuku")
 
                 setPhase(InstallPhase.Exploiting, app.getString(R.string.status_exploit))
-                executeExploit(payloads)
+                when (val exploitResult = executeExploit(payloads)) {
+                    is Result.Success -> Unit
+                    is Result.Error -> {
+                        val error = exploitResult.error
+                        appendLog("[-] ${error.message}")
+                        mutableState.value = mutableState.value.copy(
+                            phase = InstallPhase.Failed,
+                            message = error.message,
+                            retryAllowed = error.retryable,
+                        )
+                        return@launch
+                    }
+                }
 
                 if (permissiveOnly) {
                     setPhase(InstallPhase.Installed, "SELinux permissive + root shell ready")
@@ -273,12 +288,21 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
     // --- Exploit execution ---
 
-    private suspend fun executeExploit(payloads: VerifiedPayloads) {
-        executeExploitViaShizuku(payloads)
-        appendLog(app.getString(R.string.log_bootstrap_root))
+    private suspend fun executeExploit(
+        payloads: VerifiedPayloads,
+    ): Result<Unit, PayloadExecutionError> {
+        return when (val result = executeExploitViaShizuku(payloads)) {
+            is Result.Success -> {
+                appendLog(app.getString(R.string.log_bootstrap_root))
+                Result.Success(Unit)
+            }
+            is Result.Error -> result
+        }
     }
 
-    private suspend fun executeExploitViaShizuku(payloads: VerifiedPayloads) {
+    private suspend fun executeExploitViaShizuku(
+        payloads: VerifiedPayloads,
+    ): Result<Unit, PayloadExecutionError> {
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
         require(helper.exists()) { app.getString(R.string.error_helper_unavailable) }
 
@@ -318,17 +342,63 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val exitCode = handle.service.waitFor()
-            val finalLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
+            val remoteLog = handle.service.getLog()
+            val fileLog = handle.service.exec("cat /data/local/tmp/exploit.log 2>/dev/null || true")
+            val finalLog = listOf(remoteLog, fileLog)
+                .filter(String::isNotBlank)
+                .distinct()
+                .joinToString("\n")
             if (finalLog.isNotBlank()) {
                 publishLog(logPrefix, finalLog)
             }
 
-            require(exitCode == 0) {
-                app.getString(R.string.error_payload_exit, exitCode, "")
+            if (exitCode != 0) {
+                return Result.Error(
+                    PayloadExecutionError(
+                        message = app.getString(R.string.error_payload_exit, exitCode, ""),
+                        retryable = true,
+                    ),
+                )
             }
-            require(finalLog.contains("done=1") && finalLog.contains("root=1")) {
-                app.getString(R.string.error_success_marker)
+
+            val outcome = when (val parsed = PayloadResultParser.parse(finalLog)) {
+                is Result.Success -> parsed.data
+                is Result.Error -> {
+                    if (PayloadResultParser.hasLegacySuccessMarkers(finalLog)) {
+                        return Result.Success(Unit)
+                    }
+                    return Result.Error(
+                        PayloadExecutionError(
+                            message = parsed.error.message,
+                            retryable = false,
+                        ),
+                    )
+                }
             }
+            if (!outcome.success) {
+                val message = if (outcome.reason == PayloadReason.ROUTE_DISABLED) {
+                    app.getString(R.string.error_route_disabled)
+                } else {
+                    "Payload failed: ${outcome.reason.name}"
+                }
+                return Result.Error(
+                    PayloadExecutionError(
+                        message = message,
+                        retryable = outcome.retryable,
+                        reason = outcome.reason,
+                    ),
+                )
+            }
+            if (!PayloadResultParser.hasLegacySuccessMarkers(finalLog)) {
+                return Result.Error(
+                    PayloadExecutionError(
+                        message = app.getString(R.string.error_success_marker),
+                        retryable = false,
+                        reason = outcome.reason,
+                    ),
+                )
+            }
+            return Result.Success(Unit)
         } finally {
             unbindExploitService(handle)
         }
@@ -723,8 +793,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun publishLog(prefix: String, rawLog: String) {
+        val sanitizedLog = PayloadResultParser.sanitizeForDisplay(rawLog)
         mutableState.value = mutableState.value.copy(
-            log = listOf(prefix, rawLog)
+            log = listOf(prefix, sanitizedLog)
                 .filter(String::isNotBlank)
                 .joinToString("\n")
                 .takeLast(MAX_LOG_CHARS),

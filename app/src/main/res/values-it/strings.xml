@@ -91,6 +91,7 @@
     <string name="error_exploit_timeout">Tempo limite per l\'exploit scaduto</string>
     <string name="error_payload_exit">L\'exploit è uscito con codice %1$d%2$s</string>
     <string name="error_success_marker">L\'exploit non ha segnalato il successo</string>
+    <string name="error_route_disabled">Questa versione del payload non supporta ancora in sicurezza il kernel 5.10 del dispositivo. Non è stato eseguito alcun tentativo kernel e riprovare lo stesso payload non cambierà il risultato.</string>
     <string name="error_ksu_stage">Impossibile preparare ksud: %1$s</string>
     <string name="error_ksu_verify">Verifica di ReSukiSU non riuscita dopo il late-load (codice %1$d): %2$s</string>
     <string name="error_shizuku_required">Shizuku è richiesto. Installa Shizuku da Google Play e concedi le autorizzazioni a Root My Pixel.</string>

@@ -251,11 +251,13 @@ private fun InstallScreen(
                         ) {
                             Text(stringResource(R.string.action_close))
                         }
-                        Button(
-                            onClick = onRetry,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.action_retry))
+                        if (installState.retryAllowed) {
+                            Button(
+                                onClick = onRetry,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.action_retry))
+                            }
                         }
                     }
 

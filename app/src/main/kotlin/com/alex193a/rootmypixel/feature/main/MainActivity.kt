@@ -485,7 +485,7 @@ private fun ReSukiSuManagerCard(installed: Boolean, context: android.content.Con
             OutlinedButton(
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW).apply {
-                        data = "https://github.com/ReSukiSU/ReSukiSU/releases".toUri()
+                        data = "https://github.com/ReSukiSU/ReSukiSU/actions/runs/31654472450".toUri()
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     context.startActivity(intent)

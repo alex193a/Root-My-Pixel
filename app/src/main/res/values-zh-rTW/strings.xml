@@ -93,6 +93,7 @@
     <string name="error_exploit_timeout">漏洞利用程式逾時</string>
     <string name="error_payload_exit">漏洞利用程式已結束，結束代碼：%1$d%2$s</string>
     <string name="error_success_marker">漏洞利用程式未回報成功</string>
+    <string name="error_route_disabled">此版本的 payload 尚未安全支援裝置的 kernel 5.10。未執行任何核心嘗試，重試相同的 payload 也不會改變結果。</string>
     <string name="error_ksu_stage">無法準備 ksud: %1$s</string>
     <string name="error_ksu_verify">ReSukiSU 在 late-load 後驗證失敗（結束代碼 %1$d）：%2$s</string>
     <string name="error_shizuku_required">需要 Shizuku。請從 Google Play 安裝 Shizuku，並授予 Root My Pixel 所需權限。</string>

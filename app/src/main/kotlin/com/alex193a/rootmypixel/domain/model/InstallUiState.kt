@@ -9,6 +9,8 @@ data class InstallUiState(
     val canUnrootCurrentSession: Boolean = false,
     /** Non-null while unroot is paused waiting for an explicit reboot decision. */
     val unrootWarning: UnrootWarningUi? = null,
+    /** False for deterministic/terminal failures such as ROUTE_DISABLED. */
+    val retryAllowed: Boolean = true,
 ) {
     val busy: Boolean
         get() = phase in setOf(
